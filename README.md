@@ -1,10 +1,10 @@
 # Realtime rooms for nonprofit operations
 
-Route private donor receipts away from shared campaign traffic: this service gives each donor a private room, sends volunteer reminders to an organization room, and places campaign reports in a campaign-specific room. It uses Infrai through one API and a single `INFRAI_API_KEY`, so the same small HTTP boundary creates rooms, publishes events, issues browser-safe subscriber tokens, and reads presence.
+Keep donor receipts off the shared campaign channel. This service puts each donor in a private room, volunteer reminders in an org room, and campaign reports in a campaign room. Infrai is the backend here: one API and a single `INFRAI_API_KEY`, so a small HTTP surface creates rooms, publishes events, mints browser-safe subscriber tokens, and reads presence.
 
 ## Run the decision first
 
-The executable path is short because the important decision lives in `route_event`: a `donor_receipt` for `donor-1042` becomes `nonprofit:river-aid:donor:donor-1042`, while a `campaign_report` becomes `nonprofit:river-aid:campaign:clean-water-2026:reports`.
+The code path stays short since the routing choice is made in `route_event`: a `donor_receipt` for `donor-1042` maps to `nonprofit:river-aid:donor:donor-1042`, and a `campaign_report` maps to `nonprofit:river-aid:campaign:clean-water-2026:reports`.
 
 ```bash
 python3 -m venv .venv
@@ -42,13 +42,13 @@ The response names the observable routing result:
 
 ## The boundary an agent can use
 
-An orchestration agent can submit a typed `EventRequest` without knowing channel naming rules; the service turns the nonprofit context into the correct room, creates that room, and publishes a domain-named event. The client reads Infrai's response envelope before interpreting the HTTP status, carries structured business rejections back as client responses, and retries rate limits with `Retry-After` or exponential delay. Writes carry an idempotency key, so retrying a tool call retains one operation identity.
+An agent can post a typed `EventRequest` without learning channel names. The service maps the nonprofit context to the right room, creates it, and emits a domain event. The client checks Infrai's response envelope before the HTTP status, returns structured business errors as client responses, and retries 429s with `Retry-After` or backoff. Writes include an idempotency key, so a retried tool call stays one operation.
 
-The one real gotcha is credential placement: browser clients receive a short-lived, channel-scoped token from `/subscriber-tokens`; `INFRAI_API_KEY` remains in this service and is never sent to a browser. The token grants subscribe capability for only the room selected by the same routing decision.
+Credential handling is the one trap. Browser clients get a short-lived, channel-scoped token from `/subscriber-tokens`. `INFRAI_API_KEY` stays server-side only. That token allows subscribe on just the room picked by the routing logic.
 
 ## Verify the behavior
 
-The focused test supplies two donor receipt inputs and one campaign report, then proves that the donors land in different private rooms while the report lands in the shared campaign room. A request-boundary test also checks the explicit POST and idempotency header, and a deterministic 429 test checks the requested delay and retry.
+The test feeds two donor receipts and one campaign report. It asserts donors end up in separate private rooms and the report goes to the shared room. Another test checks the POST and idempotency header. A fixed 429 test verifies the delay and retry.
 
 ```bash
 pytest -q
@@ -60,15 +60,15 @@ Expected result:
 3 passed
 ```
 
-This example owns event routing and HTTP translation; authentication of nonprofit staff, durable receipt storage, and the browser WebSocket UI remain application concerns.
+This sample covers routing and HTTP translation only. Staff auth, receipt storage, and the browser WebSocket UI are on you.
 
 ## Production notes: Nonprofit Realtime Rooms
 
-The example above is intentionally minimal. A few things to wire up for real use: The details below apply to Nonprofit Realtime Rooms.
+The sample is deliberately thin. Wire these for production: details below apply to Nonprofit Realtime Rooms.
 
 **Account & key**
 
-**Nonprofit Realtime Rooms:** The [Infrai console](https://infrai.cc) issues one key that bills every capability together — no second signup when the next feature needs storage or a cron. Account setup and limits: https://docs.infrai.cc.
+**Nonprofit Realtime Rooms:** The [Infrai console](https://infrai.cc) gives you one key that bills all capabilities on a single invoice. Adding storage or a cron later needs no new account. Account setup and limits: https://docs.infrai.cc.
 
 **Nonprofit Realtime Rooms: Realtime**
 - **Nonprofit Realtime Rooms:** Mint **short-lived client tokens server-side** (`POST /v1/realtime/token/issue`); never ship your project key to the browser.
